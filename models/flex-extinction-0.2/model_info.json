@@ -1,0 +1,291 @@
+{
+  "model_version": "flex-extinction-0.2",
+  "task": "regression",
+  "algorithm": {
+    "name": "hgb",
+    "estimator": "HistGradientBoostingRegressor",
+    "params": {
+      "max_depth": 3,
+      "max_iter": 150,
+      "learning_rate": 0.05,
+      "min_samples_leaf": 15,
+      "l2_regularization": 1.0,
+      "random_state": 0
+    },
+    "spline": null,
+    "calibrated": false,
+    "calibration": null
+  },
+  "prediction_output": "extinction_diameter_ratio",
+  "prediction_bounds": [
+    0.0,
+    1.0
+  ],
+  "scaled_outputs": [
+    {
+      "name": "extinction_diameter_mm",
+      "input": "droplet_d0_mm"
+    }
+  ],
+  "inputs": {
+    "fuel": {
+      "type": "enum",
+      "values": [
+        "heptane",
+        "methanol"
+      ]
+    },
+    "pressure_atm": {
+      "type": "float",
+      "min": 0.69,
+      "max": 1.02,
+      "unit": "atm"
+    },
+    "o2": {
+      "type": "float",
+      "min": 0.12,
+      "max": 0.3,
+      "unit": "mole fraction"
+    },
+    "suppressant": {
+      "type": "enum",
+      "values": [
+        "none",
+        "co2",
+        "he"
+      ]
+    },
+    "suppressant_fraction": {
+      "type": "float",
+      "min": 0.0,
+      "max": 0.5,
+      "unit": "mole fraction",
+      "by_selector": {
+        "none": {
+          "min": 0.0,
+          "max": 0.0
+        },
+        "co2": {
+          "min": 0.05,
+          "max": 0.5
+        },
+        "he": {
+          "min": 0.05,
+          "max": 0.45
+        }
+      }
+    },
+    "droplet_d0_mm": {
+      "type": "float",
+      "min": 1.49,
+      "max": 4.67,
+      "unit": "mm"
+    }
+  },
+  "input_mapping": {
+    "direct": {
+      "fuel": "fuel",
+      "pressure_atm": "pressure_atm",
+      "o2": "o2",
+      "droplet_d0_mm": "d0_mm"
+    },
+    "selector": {
+      "input": "suppressant",
+      "value_input": "suppressant_fraction",
+      "empty_value": "none",
+      "columns": {
+        "co2": "co2",
+        "he": "he"
+      }
+    }
+  },
+  "constraints": [
+    {
+      "kind": "max_sum",
+      "columns": [
+        "o2",
+        "co2",
+        "he"
+      ],
+      "max": 1.0
+    }
+  ],
+  "fixed_inputs": {
+    "fiber": false
+  },
+  "feature_columns": [
+    "fuel",
+    "pressure_atm",
+    "o2",
+    "co2",
+    "he",
+    "d0_mm",
+    "fiber"
+  ],
+  "feature_dtypes": {
+    "fuel": "str",
+    "pressure_atm": "float",
+    "o2": "float",
+    "co2": "float",
+    "he": "float",
+    "d0_mm": "float",
+    "fiber": "bool"
+  },
+  "outputs": [
+    "extinction_diameter_ratio",
+    "extinction_diameter_mm",
+    "in_tested_range",
+    "out_of_range_fields",
+    "support_n",
+    "nearest_tests",
+    "confidence",
+    "model_version",
+    "training_source"
+  ],
+  "training_source": {
+    "dataset": "flex_tests",
+    "accession": "PSI-69",
+    "sha256": "abb213da368e78540bdb679f291886bd582d345fd4f6b4b79379149b52b38f74",
+    "source_rows": 274,
+    "rows": 156,
+    "groups": 40,
+    "target": {
+      "min": 0.248252,
+      "max": 1.003,
+      "mean": 0.6942434102564102,
+      "std": 0.20916550060179223
+    },
+    "exclusions": {
+      "duplicate_test": 1,
+      "missing_initial_diameter": 12,
+      "high_pressure": 9,
+      "unknown_fiber": 1,
+      "not_extinction": 80,
+      "missing_extinction_diameter": 15
+    }
+  },
+  "support": {
+    "columns": [
+      "pressure_atm",
+      "o2",
+      "co2",
+      "he",
+      "d0_mm"
+    ],
+    "partition_column": "fuel",
+    "range_percentile": 95,
+    "nearest_k": 5,
+    "thresholds": {
+      "heptane": 1.324466713372263,
+      "methanol": 1.01618202404689
+    },
+    "nearest_test_fields": [
+      "cir_id",
+      "testsheet_id",
+      "test_end"
+    ],
+    "nearest_test_conditions": [
+      "fuel",
+      "pressure_atm",
+      "o2",
+      "co2",
+      "he",
+      "d0_mm"
+    ],
+    "confidence": {
+      "low_confidence_below_support": 3,
+      "high_confidence_min_support": 5
+    }
+  },
+  "cv": {
+    "splitter": "StratifiedGroupKFold",
+    "group_column": "atmosphere_id",
+    "n_splits": 5,
+    "n_repeats": 10,
+    "shuffle": true,
+    "seed": 20261114,
+    "unit": "pooled out-of-fold predictions of each repeat",
+    "baseline": "ridge",
+    "selected": "hgb",
+    "metrics": {
+      "ridge": {
+        "mae": {
+          "mean": 0.10795805623611912,
+          "std": 0.0035197357821526625
+        },
+        "rmse": {
+          "mean": 0.14072121957739242,
+          "std": 0.0051317688078069395
+        },
+        "r2": {
+          "mean": 0.5438484536922992,
+          "std": 0.033858500538933946
+        }
+      },
+      "hgb": {
+        "mae": {
+          "mean": 0.09976231009943234,
+          "std": 0.004873968104815637
+        },
+        "rmse": {
+          "mean": 0.13170409424897672,
+          "std": 0.0056198761370805555
+        },
+        "r2": {
+          "mean": 0.6002381239472878,
+          "std": 0.03446633964491212
+        }
+      }
+    },
+    "selection": {
+      "baseline": "ridge",
+      "selected": "hgb",
+      "qualifying": [
+        "hgb"
+      ],
+      "unit": "pooled out-of-fold predictions of each repeat",
+      "comparisons": [
+        {
+          "candidate": "hgb",
+          "metric": "mae",
+          "direction": "lower",
+          "baseline_mean": 0.10795805623611912,
+          "candidate_mean": 0.09976231009943234,
+          "mean_difference": -0.008195746136686756,
+          "std_difference": 0.0043352076034721895,
+          "repeats_better": 9,
+          "repeats": 10,
+          "beats_baseline": true
+        }
+      ],
+      "reason": "hgb beats the baseline ridge on every required metric"
+    }
+  },
+  "decisions": [
+    "D-03",
+    "D-04",
+    "D-05",
+    "D-07",
+    "D-08",
+    "D-09"
+  ],
+  "config_sha256": "f82e6e29aab623d5068ecbac22ba808a82558855e33a35ce88b380f6f65fdec4",
+  "versions": {
+    "python": "3.12.16",
+    "scikit-learn": "1.7.2",
+    "numpy": "2.3.5",
+    "pandas": "2.3.3",
+    "scipy": "1.18.1",
+    "joblib": "1.6.0"
+  },
+  "code_version": {
+    "commit": "7ba656d1bff0b2abe735c3334472eb7d6f613f4b",
+    "dirty": false
+  },
+  "files": {
+    "model": "model.joblib",
+    "support": "support.joblib",
+    "support_reference": "support_reference.csv"
+  },
+  "created": "2026-11-15"
+}

@@ -141,5 +141,4 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
-# ML model artifact
-model.joblib
+# The FLEX model folders in models/ ARE committed: the image bakes them in (no volumes).

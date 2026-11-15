@@ -14,6 +14,7 @@ COPY corpus/manifest.json corpus/
 RUN python -c "from app import embedder; embedder.load()"
 ENV HF_HUB_OFFLINE=1
 
+# The code and the FLEX models in models/ (baked into the image: no volumes).
 COPY . .
 
 EXPOSE 8000

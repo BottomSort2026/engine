@@ -1,0 +1,404 @@
+{
+  "model_version": "flex-outcome-0.2",
+  "task": "classification",
+  "algorithm": {
+    "name": "logreg",
+    "estimator": "LogisticRegression",
+    "params": {
+      "C": 1.0,
+      "class_weight": "balanced",
+      "max_iter": 1000
+    },
+    "spline": null,
+    "calibrated": false,
+    "calibration": null
+  },
+  "class_labels": [
+    "extinction",
+    "no_extinction"
+  ],
+  "positive_class": "extinction",
+  "decision_threshold": 0.5,
+  "inputs": {
+    "fuel": {
+      "type": "enum",
+      "values": [
+        "heptane",
+        "methanol"
+      ]
+    },
+    "pressure_atm": {
+      "type": "float",
+      "min": 0.69,
+      "max": 1.02,
+      "unit": "atm"
+    },
+    "o2": {
+      "type": "float",
+      "min": 0.12,
+      "max": 0.34,
+      "unit": "mole fraction"
+    },
+    "suppressant": {
+      "type": "enum",
+      "values": [
+        "none",
+        "co2",
+        "he"
+      ]
+    },
+    "suppressant_fraction": {
+      "type": "float",
+      "min": 0.0,
+      "max": 0.5,
+      "unit": "mole fraction",
+      "by_selector": {
+        "none": {
+          "min": 0.0,
+          "max": 0.0
+        },
+        "co2": {
+          "min": 0.05,
+          "max": 0.5
+        },
+        "he": {
+          "min": 0.05,
+          "max": 0.45
+        }
+      }
+    },
+    "droplet_d0_mm": {
+      "type": "float",
+      "min": 1.1,
+      "max": 4.67,
+      "unit": "mm"
+    }
+  },
+  "input_mapping": {
+    "direct": {
+      "fuel": "fuel",
+      "pressure_atm": "pressure_atm",
+      "o2": "o2",
+      "droplet_d0_mm": "d0_mm"
+    },
+    "selector": {
+      "input": "suppressant",
+      "value_input": "suppressant_fraction",
+      "empty_value": "none",
+      "columns": {
+        "co2": "co2",
+        "he": "he"
+      }
+    }
+  },
+  "constraints": [
+    {
+      "kind": "max_sum",
+      "columns": [
+        "o2",
+        "co2",
+        "he"
+      ],
+      "max": 1.0
+    }
+  ],
+  "fixed_inputs": {
+    "fiber": false
+  },
+  "feature_columns": [
+    "fuel",
+    "pressure_atm",
+    "o2",
+    "co2",
+    "he",
+    "d0_mm",
+    "fiber"
+  ],
+  "feature_dtypes": {
+    "fuel": "str",
+    "pressure_atm": "float",
+    "o2": "float",
+    "co2": "float",
+    "he": "float",
+    "d0_mm": "float",
+    "fiber": "bool"
+  },
+  "outputs": [
+    "outcome",
+    "probabilities",
+    "in_tested_range",
+    "out_of_range_fields",
+    "support_n",
+    "nearest_tests",
+    "confidence",
+    "model_version",
+    "training_source"
+  ],
+  "training_source": {
+    "dataset": "flex_tests",
+    "accession": "PSI-69",
+    "sha256": "abb213da368e78540bdb679f291886bd582d345fd4f6b4b79379149b52b38f74",
+    "source_rows": 274,
+    "rows": 251,
+    "groups": 44,
+    "target": {
+      "extinction": 171,
+      "no_extinction": 80
+    },
+    "exclusions": {
+      "duplicate_test": 1,
+      "missing_initial_diameter": 12,
+      "high_pressure": 9,
+      "unknown_fiber": 1
+    },
+    "original_target_values": {
+      "extinction": 171,
+      "disruption": 53,
+      "completion": 27
+    }
+  },
+  "support": {
+    "columns": [
+      "pressure_atm",
+      "o2",
+      "co2",
+      "he",
+      "d0_mm"
+    ],
+    "partition_column": "fuel",
+    "range_percentile": 95,
+    "nearest_k": 5,
+    "thresholds": {
+      "heptane": 0.7236060980831089,
+      "methanol": 0.8300262368157266
+    },
+    "nearest_test_fields": [
+      "cir_id",
+      "testsheet_id",
+      "test_end"
+    ],
+    "nearest_test_conditions": [
+      "fuel",
+      "pressure_atm",
+      "o2",
+      "co2",
+      "he",
+      "d0_mm"
+    ],
+    "confidence": {
+      "low_confidence_below_support": 3,
+      "high_confidence_min_support": 5,
+      "high_confidence_min_probability": 0.7
+    }
+  },
+  "cv": {
+    "splitter": "StratifiedGroupKFold",
+    "group_column": "atmosphere_id",
+    "n_splits": 5,
+    "n_repeats": 10,
+    "shuffle": true,
+    "seed": 20261114,
+    "unit": "pooled out-of-fold predictions of each repeat",
+    "baseline": "logreg",
+    "selected": "logreg",
+    "metrics": {
+      "logreg": {
+        "macro_f1": {
+          "mean": 0.79325948966653,
+          "std": 0.01235691240539259
+        },
+        "recall_extinction": {
+          "mean": 0.8,
+          "std": 0.010061199142739917
+        },
+        "recall_no_extinction": {
+          "mean": 0.8299999999999998,
+          "std": 0.025124689052802237
+        },
+        "brier": {
+          "mean": 0.13267573465560095,
+          "std": 0.0045997458322287075
+        },
+        "roc_auc": {
+          "mean": 0.8925657894736843,
+          "std": 0.004674483269196766
+        }
+      },
+      "logreg_spline": {
+        "macro_f1": {
+          "mean": 0.7906787139078568,
+          "std": 0.010336395981717721
+        },
+        "recall_extinction": {
+          "mean": 0.8035087719298246,
+          "std": 0.017776238776106033
+        },
+        "recall_no_extinction": {
+          "mean": 0.8175000000000001,
+          "std": 0.028613807855648984
+        },
+        "brier": {
+          "mean": 0.13483534586927842,
+          "std": 0.0048871517132625004
+        },
+        "roc_auc": {
+          "mean": 0.8922880116959065,
+          "std": 0.005883413142341908
+        }
+      },
+      "hgb": {
+        "macro_f1": {
+          "mean": 0.7566158990598261,
+          "std": 0.03161070384019097
+        },
+        "recall_extinction": {
+          "mean": 0.8941520467836257,
+          "std": 0.02698309238610368
+        },
+        "recall_no_extinction": {
+          "mean": 0.6,
+          "std": 0.08385254915624211
+        },
+        "brier": {
+          "mean": 0.13960539758540425,
+          "std": 0.007647623720005183
+        },
+        "roc_auc": {
+          "mean": 0.8624305555555555,
+          "std": 0.015518710159206917
+        }
+      },
+      "logreg_calibrated": {
+        "macro_f1": {
+          "mean": 0.7721042316208956,
+          "std": 0.016572222725799546
+        },
+        "recall_extinction": {
+          "mean": 0.92046783625731,
+          "std": 0.020954939025928557
+        },
+        "recall_no_extinction": {
+          "mean": 0.5925,
+          "std": 0.031224989991991976
+        },
+        "brier": {
+          "mean": 0.12633039700089937,
+          "std": 0.004582530318797266
+        },
+        "roc_auc": {
+          "mean": 0.890877192982456,
+          "std": 0.008636676572033444
+        }
+      }
+    },
+    "selection": {
+      "baseline": "logreg",
+      "selected": "logreg",
+      "qualifying": [],
+      "unit": "pooled out-of-fold predictions of each repeat",
+      "comparisons": [
+        {
+          "candidate": "logreg_spline",
+          "metric": "macro_f1",
+          "direction": "higher",
+          "baseline_mean": 0.79325948966653,
+          "candidate_mean": 0.7906787139078568,
+          "mean_difference": -0.002580775758673215,
+          "std_difference": 0.012731996530188224,
+          "repeats_better": 3,
+          "repeats": 10,
+          "beats_baseline": false
+        },
+        {
+          "candidate": "logreg_spline",
+          "metric": "brier",
+          "direction": "lower",
+          "baseline_mean": 0.13267573465560095,
+          "candidate_mean": 0.13483534586927842,
+          "mean_difference": 0.002159611213677484,
+          "std_difference": 0.00252173969247345,
+          "repeats_better": 1,
+          "repeats": 10,
+          "beats_baseline": false
+        },
+        {
+          "candidate": "hgb",
+          "metric": "macro_f1",
+          "direction": "higher",
+          "baseline_mean": 0.79325948966653,
+          "candidate_mean": 0.7566158990598261,
+          "mean_difference": -0.03664359060670404,
+          "std_difference": 0.03620048852539712,
+          "repeats_better": 2,
+          "repeats": 10,
+          "beats_baseline": false
+        },
+        {
+          "candidate": "hgb",
+          "metric": "brier",
+          "direction": "lower",
+          "baseline_mean": 0.13267573465560095,
+          "candidate_mean": 0.13960539758540425,
+          "mean_difference": 0.0069296629298033156,
+          "std_difference": 0.00566618263426545,
+          "repeats_better": 1,
+          "repeats": 10,
+          "beats_baseline": false
+        },
+        {
+          "candidate": "logreg_calibrated",
+          "metric": "macro_f1",
+          "direction": "higher",
+          "baseline_mean": 0.79325948966653,
+          "candidate_mean": 0.7721042316208956,
+          "mean_difference": -0.021155258045634485,
+          "std_difference": 0.020811216959910263,
+          "repeats_better": 2,
+          "repeats": 10,
+          "beats_baseline": false
+        },
+        {
+          "candidate": "logreg_calibrated",
+          "metric": "brier",
+          "direction": "lower",
+          "baseline_mean": 0.13267573465560095,
+          "candidate_mean": 0.12633039700089937,
+          "mean_difference": -0.006345337654701558,
+          "std_difference": 0.005529886646104555,
+          "repeats_better": 9,
+          "repeats": 10,
+          "beats_baseline": true
+        }
+      ],
+      "reason": "No candidate beats the baseline logreg on every required metric, so the baseline ships"
+    }
+  },
+  "decisions": [
+    "D-01",
+    "D-03",
+    "D-04",
+    "D-05",
+    "D-06",
+    "D-07",
+    "D-09"
+  ],
+  "config_sha256": "b6f7fbcd79466581d1d14e337fbfa8b76cb4a7738000223a9a5c2c3934f6888a",
+  "versions": {
+    "python": "3.12.16",
+    "scikit-learn": "1.7.2",
+    "numpy": "2.3.5",
+    "pandas": "2.3.3",
+    "scipy": "1.18.1",
+    "joblib": "1.6.0"
+  },
+  "code_version": {
+    "commit": "7ba656d1bff0b2abe735c3334472eb7d6f613f4b",
+    "dirty": false
+  },
+  "files": {
+    "model": "model.joblib",
+    "support": "support.joblib",
+    "support_reference": "support_reference.csv"
+  },
+  "created": "2026-11-15"
+}
