@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "corpus_name": "flame-in-freefall",
+  "description": "Base de conocimiento de seguridad contra incendios construida con investigaciones de combustión de NASA PSI y recursos de la NASA",
+  "built_at": "2026-11-15T00:41:43+00:00",
+  "build_stages": [
+    0
+  ],
+  "embedding": {
+    "model_id": "BAAI/bge-small-en-v1.5",
+    "revision": null,
+    "dimension": 384,
+    "normalize": true,
+    "max_length": 512,
+    "query_prefix": "Represent this sentence for searching relevant passages: ",
+    "document_prefix": "",
+    "resolved_revision": "5c38ec7c405ec4b44b94cc5a9bb96e735b38267a"
+  },
+  "search": {
+    "k": 5,
+    "candidates_per_method": 20,
+    "fusion": "rrf",
+    "rrf_k": 60,
+    "fts_tokenizer": "porter unicode61 remove_diacritics 2"
+  },
+  "counts": {
+    "investigations": 24,
+    "documents": 305,
+    "chunks": 455
+  },
+  "sqlite_vec_version": "v0.1.9",
+  "vector_distance": "L2 on L2-normalized vectors; cosine similarity = 1 - distance^2 / 2"
+}

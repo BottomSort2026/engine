@@ -3,3 +3,10 @@ uvicorn[standard]
 scikit-learn
 pytest
 httpx
+# --- /embed: query embeddings (same library versions as the corpus build in the train repo) ---
+# CPU-only PyTorch. Versions pinned to the corpus build (`python main.py corpus info` in the train repo,
+# corpus built 2026-11-15T00:41:43Z). Change them only together with the train environment.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.14.1
+sentence-transformers==6.3.0
+transformers==5.23.0
