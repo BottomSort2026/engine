@@ -1,11 +1,21 @@
+"""GET /health and POST /predict. Needs corpus/manifest.json; the first run downloads the embedding model."""
 from fastapi.testclient import TestClient
 
+from app import embedder
 from app.main import app
 
-# lifespan loads model.joblib, so run `python train.py` first
 with TestClient(app) as client:
-    def test_health():
-        assert client.get("/health").json() == {"status": "ok"}
+    def test_health_reports_the_manifest_embedding():
+        config, manifest = embedder.load_config()
+        assert client.get("/health").json() == {
+            "status": "ok",
+            "embedding": {
+                "model_id": config.model_id,
+                "revision": config.revision,
+                "dimension": config.dimension,
+                "corpus_built_at": manifest["built_at"],
+            },
+        }
 
     def test_predict():
         r = client.post("/predict", json={"features": [5.1, 3.5, 1.4, 0.2]})

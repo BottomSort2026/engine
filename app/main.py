@@ -43,9 +43,23 @@ class EmbedResponse(BaseModel):
     revision: str | None
 
 
+class EmbeddingInfo(BaseModel):
+    """What /embed serves, from corpus/manifest.json. The MCP reports the same corpus build date."""
+
+    model_id: str
+    revision: str | None
+    dimension: int
+    corpus_built_at: str | None
+
+
+class HealthResponse(BaseModel):
+    status: str
+    embedding: EmbeddingInfo
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    model.load()  # fails fast at startup if model.joblib is missing
+    model.load()  # fails fast at startup if predict.joblib is missing
     embedder.load()  # fails fast at startup if corpus/manifest.json is missing or invalid
     yield
 
@@ -53,9 +67,9 @@ async def lifespan(_: FastAPI):
 app = FastAPI(title="ML model API", lifespan=lifespan)
 
 
-@app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+@app.get("/health", response_model=HealthResponse)
+def health() -> HealthResponse:
+    return HealthResponse(status="ok", embedding=EmbeddingInfo(**embedder.info()))
 
 
 @app.post("/predict", response_model=PredictResponse)

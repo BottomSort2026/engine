@@ -1,6 +1,6 @@
 fastapi
 uvicorn[standard]
-scikit-learn
+scikit-learn==1.9.1
 pytest
 httpx
 # --- /embed: query embeddings (same library versions as the corpus build in the train repo) ---
