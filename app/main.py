@@ -47,30 +47,57 @@ class TrainingSource(BaseModel):
 
 
 class Support(BaseModel):
-    """How much real data backs the prediction (the model's own k-NN over its training tests)."""
+    """How much real data backs the prediction: the model's own k-NN over its training tests (same fuel only)."""
 
     in_tested_range: bool = Field(
-        description="Every input inside its tested range AND the closest real test within the 'near' threshold")
-    out_of_range_fields: list[str]
-    support_n: int = Field(description="Real tests of the same fuel within the 'near' threshold")
-    nearest_tests: list[NearestTest]
-    confidence: Literal["low", "medium", "high"]
+        description="Every input inside its tested range AND the closest real test within `threshold`")
+    out_of_range_fields: list[str] = Field(description="Inputs outside their own tested min/max")
+    support_n: int = Field(description="Real tests of the same fuel within `threshold`")
+    threshold: float = Field(
+        description="'Near' distance for this model and fuel (95th percentile of the distance from each training "
+                    "test to its nearest other test). Compare nearest_tests[].distance with it")
+    confidence: Literal["low", "medium", "high"] = Field(
+        description="low: out of range or support_n < 3; high: in range, support_n >= 5 and (classifier) "
+                    "probability >= 0.7; otherwise medium")
+    nearest_tests: list[NearestTest] = Field(description="The 5 closest real tests, closest first")
+
+
+class ModelSource(BaseModel):
+    """Which model answered, and the data it was trained on (to cite it)."""
+
+    model_config = ConfigDict(protected_namespaces=())
+
     model_version: str
     training_source: TrainingSource
 
 
-class OutcomePrediction(Support):
-    outcome: Literal["extinction", "no_extinction"] = Field(
+class OutcomeValues(BaseModel):
+    label: Literal["extinction", "no_extinction"] = Field(
         description="extinction: the flame goes out on its own; no_extinction: the droplet burns out or breaks apart")
-    probabilities: dict[str, float]
+    probabilities: dict[str, float] = Field(description="Probability of each label; the label is the one >= 0.5")
 
 
-class ExtinctionPrediction(Support):
-    """Meaningful only when outcome.outcome is extinction."""
-
+class ExtinctionValues(BaseModel):
     extinction_diameter_ratio: float = Field(description="D_ext / D0, in [0, 1]")
-    extinction_diameter_mm: float
+    extinction_diameter_mm: float = Field(description="D_ext = ratio x D0")
     fuel_burned_fraction: float = Field(description="1 - (D_ext / D0)^3: share of the droplet volume burned")
+
+
+class OutcomePrediction(BaseModel):
+    """Does the droplet flame go out on its own?"""
+
+    prediction: OutcomeValues
+    support: Support
+    model: ModelSource
+
+
+class ExtinctionPrediction(BaseModel):
+    """If the flame goes out: how large is the droplet then? Show it only when outcome.prediction.label is
+    extinction."""
+
+    prediction: ExtinctionValues
+    support: Support
+    model: ModelSource
 
 
 class PredictResponse(BaseModel):
@@ -79,14 +106,17 @@ class PredictResponse(BaseModel):
 
 
 class ModelDescription(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     model_version: str
     task: str
     algorithm: str
     inputs: dict[str, dict[str, Any]] = Field(description="This model's own tested ranges")
-    outputs: list[str]
+    outputs: list[str] = Field(description="Fields of this model's `prediction` block")
     training_source: dict[str, Any]
     metrics: dict[str, float] = Field(description="Cross-validated metrics of the shipped model")
     metrics_unit: str
+    support: dict[str, Any] = Field(description="k-NN settings: thresholds per fuel, nearest_k, confidence rule")
 
 
 class ModelInfoResponse(BaseModel):

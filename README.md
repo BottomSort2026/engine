@@ -100,34 +100,65 @@ curl -s -X POST localhost:8000/predict -H 'content-type: application/json' \
   -d '{"fuel":"methanol","pressure_atm":1.0,"o2":0.21,"suppressant":"none","suppressant_fraction":0.0,"droplet_d0_mm":3.0}'
 ```
 
+Each model answers in one block with three parts: **`prediction`** (what the model predicts), **`support`**
+(how much real data backs it: the model's own k-NN) and **`model`** (which model answered, to cite it).
+
 ```json
 {
   "outcome": {
-    "in_tested_range": true, "out_of_range_fields": [], "support_n": 10,
-    "nearest_tests": [{"cir_id": "205R001", "testsheet_id": "FLEX-…", "test_end": "extinction",
-                       "conditions": {"fuel": "methanol", "pressure_atm": 1.0, "o2": 0.21, "co2": 0.0, "he": 0.0,
-                                      "d0_mm": 3.0}, "distance": 0.2}, "… 5 tests"],
-    "confidence": "medium", "model_version": "flex-outcome-0.2",
-    "training_source": {"dataset": "flex_tests", "accession": "PSI-69", "sha256": "abb213…", "rows": 251},
-    "outcome": "extinction", "probabilities": {"extinction": 0.587, "no_extinction": 0.413}
+    "prediction": {
+      "label": "extinction",
+      "probabilities": {"extinction": 0.587, "no_extinction": 0.413}
+    },
+    "support": {
+      "in_tested_range": true,
+      "out_of_range_fields": [],
+      "support_n": 10,
+      "threshold": 0.830,
+      "confidence": "medium",
+      "nearest_tests": [
+        {"cir_id": "205R001", "testsheet_id": "FLEX-046", "test_end": "disruption",
+         "conditions": {"fuel": "methanol", "pressure_atm": 1.0125, "o2": 0.21, "co2": 0.0, "he": 0.0, "d0_mm": 2.78},
+         "distance": 0.361},
+        "… 4 more, closest first"
+      ]
+    },
+    "model": {
+      "model_version": "flex-outcome-0.2",
+      "training_source": {"dataset": "flex_tests", "accession": "PSI-69", "sha256": "abb213…", "rows": 251}
+    }
   },
   "extinction": {
-    "in_tested_range": true, "out_of_range_fields": [], "support_n": 11, "nearest_tests": ["…"],
-    "confidence": "high", "model_version": "flex-extinction-0.2", "training_source": {"…": "rows 156"},
-    "extinction_diameter_ratio": 0.445, "extinction_diameter_mm": 1.336, "fuel_burned_fraction": 0.912
+    "prediction": {
+      "extinction_diameter_ratio": 0.445,
+      "extinction_diameter_mm": 1.336,
+      "fuel_burned_fraction": 0.912
+    },
+    "support": {"in_tested_range": true, "out_of_range_fields": [], "support_n": 11, "threshold": 1.016,
+                "confidence": "high", "nearest_tests": ["…"]},
+    "model": {"model_version": "flex-extinction-0.2", "training_source": {"…": "rows 156"}}
   }
 }
 ```
 
-(Shortened; the test IDs and distances above are illustrative. The full schema is in `/openapi.json`.)
+(Shortened, with rounded numbers; the API returns full floats. The full schema is in `/openapi.json`.)
 
-- **Show the extinction block only when `outcome.outcome` is `extinction`.** Otherwise the droplet burned out
-  or broke apart, and a diameter at extinction has no meaning. Both blocks are always computed.
+- **Show the extinction block only when `outcome.prediction.label` is `extinction`.** Otherwise the droplet
+  burned out or broke apart, and a diameter at extinction has no meaning. Both blocks are always computed.
 - `fuel_burned_fraction = 1 − (D_ext/D0)³`, the share of the droplet volume burned before the flame went out.
-- Each block has its own support (its model's k-NN): `in_tested_range`, `out_of_range_fields`, `support_n`
-  (real tests nearby), `nearest_tests` (the 5 closest real tests; `testsheet_id` is the TestSheet title in
-  `corpus.db`) and `confidence` (`low` / `medium` / `high`). A high probability with `support_n: 0` is an
-  extrapolation, not a supported prediction.
+- `support`, per block (each model has its own k-NN, over the tests of the queried fuel only):
+
+  | Field | Meaning |
+  |---|---|
+  | `nearest_tests` | The 5 closest real ISS tests, closest first. `testsheet_id` is the TestSheet title in `corpus.db`; `test_end` is how that real test ended; `conditions` are its real conditions |
+  | `distance` | Euclidean distance over pressure, O₂, CO₂, He and D₀, each divided by its standard deviation in that fuel's training tests. 0 = identical conditions |
+  | `threshold` | The "near" distance for this model and fuel: the 95th percentile of the distance from each training test to its nearest other test. Compare each `distance` with it |
+  | `support_n` | Real tests within `threshold` |
+  | `in_tested_range` | Every input inside its own tested range **and** the closest test within `threshold` |
+  | `confidence` | `low`: out of range or `support_n` < 3; `high`: in range, `support_n` ≥ 5 and (classifier) probability ≥ 0.7; otherwise `medium` |
+
+  A high probability with `support_n: 0` is an extrapolation, not a supported prediction. Distances of the two
+  blocks are not comparable: each k-NN has its own scale and threshold.
 - **A value outside its tested range is not an error:** it is listed in `out_of_range_fields` and the
   confidence becomes `low`.
 - **422** for a missing or unknown field, a number sent as a string, an unknown fuel or suppressant,
@@ -142,7 +173,9 @@ curl -s localhost:8000/model-info
 
 - `inputs`: one control per input, wide enough for both models. `suppressant_fraction.by_selector` gives the
   range for each suppressant (`none`: 0 only).
-- `outcome`, `extinction`: each model's own tested ranges, outputs, training data and cross-validated metrics.
+- `outcome`, `extinction`: each model's own tested ranges, `outputs` (the fields of its `prediction` block),
+  training data, cross-validated metrics and k-NN settings (`support.thresholds` per fuel, `nearest_k`, the
+  confidence rule).
   The extinction model was trained on fewer tests (O₂ up to 0.30): a query outside its ranges is flagged in its
   block, not rejected.
 

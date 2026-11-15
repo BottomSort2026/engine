@@ -53,9 +53,13 @@ def client():
         yield test_client
 
 
+THRESHOLDS = {"outcome": 0.8300262368157266, "extinction": 1.01618202404689}  # methanol, from model_info.json
+
+
 def support_of(block: dict) -> tuple:
-    return (block["in_tested_range"], block["out_of_range_fields"], block["support_n"], block["confidence"],
-            [test["cir_id"] for test in block["nearest_tests"]])
+    support = block["support"]
+    return (support["in_tested_range"], support["out_of_range_fields"], support["support_n"], support["confidence"],
+            [test["cir_id"] for test in support["nearest_tests"]])
 
 
 @pytest.mark.parametrize("name", OUTCOME_CARD)
@@ -64,36 +68,62 @@ def test_outcome_block_matches_the_model_card(client, name):
     response = client.post("/predict", json=inputs)
     assert response.status_code == 200, response.text
     block = response.json()["outcome"]
-    assert block["outcome"] == outcome
-    assert block["probabilities"][outcome] == pytest.approx(probability, abs=CARD_DECIMALS)
-    assert sum(block["probabilities"].values()) == pytest.approx(1.0)
+    assert block["prediction"]["label"] == outcome
+    assert block["prediction"]["probabilities"][outcome] == pytest.approx(probability, abs=CARD_DECIMALS)
+    assert sum(block["prediction"]["probabilities"].values()) == pytest.approx(1.0)
     assert support_of(block) == tuple(support)
-    assert block["model_version"] == "flex-outcome-0.2"
-    assert block["training_source"]["rows"] == 251
+    assert block["model"]["model_version"] == "flex-outcome-0.2"
+    assert block["model"]["training_source"]["rows"] == 251
 
 
 @pytest.mark.parametrize("name", EXTINCTION_CARD)
 def test_extinction_block_matches_the_model_card(client, name):
     inputs, ratio, diameter_mm, *support = EXTINCTION_CARD[name]
     block = client.post("/predict", json=inputs).json()["extinction"]
-    assert block["extinction_diameter_ratio"] == pytest.approx(ratio, abs=CARD_DECIMALS)
-    assert block["extinction_diameter_mm"] == pytest.approx(diameter_mm, abs=CARD_DECIMALS)
+    assert block["prediction"]["extinction_diameter_ratio"] == pytest.approx(ratio, abs=CARD_DECIMALS)
+    assert block["prediction"]["extinction_diameter_mm"] == pytest.approx(diameter_mm, abs=CARD_DECIMALS)
     assert support_of(block) == tuple(support)
-    assert block["model_version"] == "flex-extinction-0.2"
-    assert block["training_source"]["rows"] == 156
+    assert block["model"]["model_version"] == "flex-extinction-0.2"
+    assert block["model"]["training_source"]["rows"] == 156
+
+
+def test_each_block_has_prediction_support_and_model(client):
+    body = client.post("/predict", json=ISS_AIR).json()
+    assert list(body) == ["outcome", "extinction"]
+    for block in body.values():
+        assert list(block) == ["prediction", "support", "model"]
+    assert list(body["outcome"]["prediction"]) == ["label", "probabilities"]
+    assert list(body["extinction"]["prediction"]) == ["extinction_diameter_ratio", "extinction_diameter_mm",
+                                                      "fuel_burned_fraction"]
+
+
+def test_support_carries_the_knn_threshold_of_the_queried_fuel(client):
+    for name, block in client.post("/predict", json=ISS_AIR).json().items():
+        support = block["support"]
+        assert support["threshold"] == pytest.approx(THRESHOLDS[name])
+        # in range = the closest real test is within the threshold (and every input inside its own range)
+        assert support["in_tested_range"] == (support["nearest_tests"][0]["distance"] <= support["threshold"])
+        within = sum(test["distance"] <= support["threshold"] for test in support["nearest_tests"])
+        assert within == min(support["support_n"], len(support["nearest_tests"]))
+
+
+def test_heptane_queries_use_the_heptane_threshold(client):
+    support = client.post("/predict", json={**ISS_AIR, "fuel": "heptane"}).json()["outcome"]["support"]
+    assert support["threshold"] == pytest.approx(0.7236060980831089)
+    assert all(test["conditions"]["fuel"] == "heptane" for test in support["nearest_tests"])
 
 
 def test_fuel_burned_fraction_is_one_minus_the_cubed_ratio(client):
-    block = client.post("/predict", json=ISS_AIR).json()["extinction"]
-    assert block["fuel_burned_fraction"] == pytest.approx(1 - block["extinction_diameter_ratio"] ** 3)
-    assert 0.0 <= block["fuel_burned_fraction"] <= 1.0
+    prediction = client.post("/predict", json=ISS_AIR).json()["extinction"]["prediction"]
+    assert prediction["fuel_burned_fraction"] == pytest.approx(1 - prediction["extinction_diameter_ratio"] ** 3)
+    assert 0.0 <= prediction["fuel_burned_fraction"] <= 1.0
 
 
 def test_nearest_tests_carry_the_testsheet_and_the_real_conditions(client):
     for block in client.post("/predict", json=ISS_AIR).json().values():
-        distances = [test["distance"] for test in block["nearest_tests"]]
+        distances = [test["distance"] for test in block["support"]["nearest_tests"]]
         assert distances == sorted(distances)
-        for test in block["nearest_tests"]:
+        for test in block["support"]["nearest_tests"]:
             assert test["testsheet_id"] is None or test["testsheet_id"].startswith("FLEX-")
             assert test["test_end"] in ("extinction", "disruption", "completion")
             assert sorted(test["conditions"]) == ["co2", "d0_mm", "fuel", "he", "o2", "pressure_atm"]
@@ -108,9 +138,9 @@ def test_value_outside_its_tested_range_is_flagged_not_rejected(client):
     response = client.post("/predict", json={**ISS_AIR, "droplet_d0_mm": 6.0})
     assert response.status_code == 200
     for block in response.json().values():
-        assert block["out_of_range_fields"] == ["droplet_d0_mm"]
-        assert block["in_tested_range"] is False
-        assert block["confidence"] == "low"
+        assert block["support"]["out_of_range_fields"] == ["droplet_d0_mm"]
+        assert block["support"]["in_tested_range"] is False
+        assert block["support"]["confidence"] == "low"
 
 
 @pytest.mark.parametrize("body", [
@@ -142,7 +172,10 @@ def test_model_info_describes_the_controls_and_both_models(client):
     assert body["inputs"]["suppressant_fraction"]["by_selector"]["none"] == {"min": 0.0, "max": 0.0}
     assert body["outcome"]["model_version"] == "flex-outcome-0.2"
     assert body["extinction"]["model_version"] == "flex-extinction-0.2"
-    assert "fuel_burned_fraction" in body["extinction"]["outputs"]
+    assert body["outcome"]["outputs"] == ["label", "probabilities"]
+    assert body["extinction"]["outputs"] == ["extinction_diameter_ratio", "extinction_diameter_mm",
+                                             "fuel_burned_fraction"]
+    assert body["outcome"]["support"]["thresholds"]["methanol"] == pytest.approx(THRESHOLDS["outcome"])
     assert body["outcome"]["metrics"]["roc_auc"] == pytest.approx(0.8926, abs=1e-4)
     assert body["extinction"]["metrics"]["mae"] == pytest.approx(0.0998, abs=1e-4)
     assert body["outcome"]["training_source"]["accession"] == "PSI-69"
@@ -150,8 +183,8 @@ def test_model_info_describes_the_controls_and_both_models(client):
 
 def test_openapi_publishes_the_predict_contract(client):
     schemas = client.get("/openapi.json").json()["components"]["schemas"]
-    assert {"PredictRequest", "PredictResponse", "OutcomePrediction", "ExtinctionPrediction", "NearestTest",
-            "ModelInfoResponse"} <= set(schemas)
+    assert {"PredictRequest", "PredictResponse", "OutcomePrediction", "ExtinctionPrediction", "OutcomeValues",
+            "ExtinctionValues", "Support", "ModelSource", "NearestTest", "ModelInfoResponse"} <= set(schemas)
 
 
 # --- flex.py on its own (no API, no embedding model) ---
@@ -188,4 +221,4 @@ def test_sample_inputs_are_a_valid_request():
     flex.load()
     result = flex.predict(flex.sample_inputs())
     assert set(result) == {"outcome", "extinction"}
-    assert math.isfinite(result["extinction"]["fuel_burned_fraction"])
+    assert math.isfinite(result["extinction"]["prediction"]["fuel_burned_fraction"])

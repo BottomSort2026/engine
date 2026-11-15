@@ -70,7 +70,11 @@ repo, and adds `GET /model-info`. It was written without running it, so read thi
   becomes `low`.
 - 422 has two shapes. Schema errors come from FastAPI (`detail` is a list); the models' own rules (unknown fuel,
   fraction without a suppressant, `o2 + suppressant_fraction > 1`) return `detail` as one string.
-- The extinction block is always computed. Consumers show it only when `outcome.outcome` is `extinction`.
+- Each model block has three parts: `prediction` (what it predicts), `support` (its k-NN: `in_tested_range`,
+  `out_of_range_fields`, `support_n`, `threshold`, `confidence`, `nearest_tests`) and `model` (`model_version`,
+  `training_source`). The classifier's answer is `outcome.prediction.label`.
+- The extinction block is always computed. Consumers show it only when `outcome.prediction.label` is
+  `extinction`.
 
 ## Updating the models later
 

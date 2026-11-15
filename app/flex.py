@@ -5,6 +5,13 @@ Two model folders exported by the train repo (`python main.py train export`) and
 - extinction: if it goes out, D_ext/D0 and D_ext in mm
 Each folder carries its own k-NN support (how many real ISS tests back the query, and the closest ones).
 
+inference.reference_predict returns one flat dictionary per model. engine reshapes it into three parts, so a
+consumer can tell what is predicted from what backs it:
+- prediction: what the model predicts (outcome: label + probabilities; extinction: D_ext/D0, D_ext mm and the
+  derived fuel_burned_fraction)
+- support: the k-NN (in_tested_range, out_of_range_fields, support_n, threshold, confidence, nearest_tests)
+- model: model_version and training_source
+
 The inference code is app/inference.py, a verbatim copy of train/src/flame/training/inference.py, so engine
 returns exactly what the model cards in the train repo report. The models are baked into the image (no volumes).
 If a folder is missing, or scikit-learn / numpy differ from the versions the models were exported with, the
@@ -24,7 +31,10 @@ MODEL_FOLDERS = {"outcome": "flex-outcome-0.2", "extinction": "flex-extinction-0
 EXPECTED_TASKS = {"outcome": "classification", "extinction": "regression"}
 # The pickled objects depend on these exact versions (the others are pinned in requirements.txt too).
 PINNED_LIBRARIES = ("scikit-learn", "numpy")
-# Outputs engine adds on top of what the model computes.
+SUPPORT_FIELDS = ("in_tested_range", "out_of_range_fields", "support_n", "confidence", "nearest_tests")
+MODEL_FIELDS = ("model_version", "training_source")
+# Prediction fields renamed by engine, and the ones it adds on top of what the model computes.
+RENAMED_OUTPUTS = {"outcome": "label"}
 DERIVED_OUTPUTS = {"extinction": ["fuel_burned_fraction"]}
 
 _bundles: dict[str, dict[str, Any]] = {}
@@ -78,15 +88,30 @@ def versions() -> dict[str, str]:
 def predict(inputs: dict[str, Any]) -> dict[str, Any]:
     """Run both models on the same inputs. Invalid inputs raise ValueError (the API turns it into a 422).
 
-    Both blocks are always computed. Consumers show the extinction block only when outcome.outcome is
+    Both blocks are always computed. Consumers show the extinction block only when outcome.prediction.label is
     "extinction": otherwise the droplet burned out or broke apart, and a diameter at extinction has no meaning.
     """
-    bundles = loaded()
-    outcome = inference.reference_predict(bundles["outcome"], inputs)
-    extinction = inference.reference_predict(bundles["extinction"], inputs)
+    result = {}
+    for name, bundle in loaded().items():
+        flat = inference.reference_predict(bundle, inputs)
+        prediction = {RENAMED_OUTPUTS.get(key, key): value for key, value in flat.items()
+                      if key not in SUPPORT_FIELDS + MODEL_FIELDS}
+        support = {key: flat[key] for key in SUPPORT_FIELDS}
+        support["threshold"] = threshold(bundle["info"], inputs)
+        result[name] = {"prediction": prediction, "support": support,
+                        "model": {key: flat[key] for key in MODEL_FIELDS}}
+    extinction = result["extinction"]["prediction"]
     # Share of the droplet's volume burned before the flame went out (volume scales with D^3).
     extinction["fuel_burned_fraction"] = 1.0 - extinction["extinction_diameter_ratio"] ** 3
-    return {"outcome": outcome, "extinction": extinction}
+    return result
+
+
+def threshold(info: dict[str, Any], inputs: dict[str, Any]) -> float:
+    """The k-NN 'near' distance used for this query: one per value of the partition column (the fuel)."""
+    support = info["support"]
+    partition_input = next(name for name, column in info["input_mapping"]["direct"].items()
+                           if column == support["partition_column"])
+    return float(support["thresholds"][str(inputs[partition_input])])
 
 
 def merge_ranges(specs: list[dict[str, Any]]) -> dict[str, Any]:
@@ -113,10 +138,13 @@ def describe(name: str, info: dict[str, Any]) -> dict[str, Any]:
         "task": info["task"],
         "algorithm": info["algorithm"]["estimator"],
         "inputs": info["inputs"],
-        "outputs": info["outputs"] + DERIVED_OUTPUTS.get(name, []),
+        "outputs": [RENAMED_OUTPUTS.get(key, key) for key in info["outputs"]
+                    if key not in SUPPORT_FIELDS + MODEL_FIELDS] + DERIVED_OUTPUTS.get(name, []),
         "training_source": info["training_source"],
         "metrics": {metric: values["mean"] for metric, values in info["cv"]["metrics"][selected].items()},
         "metrics_unit": info["cv"]["unit"],
+        "support": {key: info["support"][key] for key in ("thresholds", "nearest_k", "range_percentile",
+                                                          "confidence")},
     }
 
 
